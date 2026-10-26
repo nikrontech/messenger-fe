@@ -28,6 +28,7 @@ function validateUsername(username) {
 function openChat(username) {
   const screen = document.getElementById('chat-screen').content.cloneNode(true);
   const chat = screen.querySelector('[data-chat]');
+  chat.setAttribute('ws-connect', WS_URL);
   chat.dataset.username = username;
   chat.querySelector('[data-chat-username]').textContent = username;
   const app = document.getElementById('app');

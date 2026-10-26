@@ -24,6 +24,19 @@ No install and no build step for the frontend. Needs Python 3 (or any static fil
 3. Open http://localhost:5173 in a browser.
 4. Stop: `Ctrl+C`, or kill the background process.
 
+### Docker (deployment)
+
+The image serves `public/` with nginx and proxies `/ws` to messenger-be, so the page and the socket share one origin (an https page gets `wss` automatically).
+
+```sh
+docker build -t messenger-fe .
+docker run --rm -p 8080:80 -e BACKEND_URL=http://<backend-host>:3000 messenger-fe
+```
+
+Open http://localhost:8080. `BACKEND_URL` is messenger-be as nginx reaches it: scheme, host and port, no path. The default, `http://host.docker.internal:3000`, is a backend running on your machine (Docker Desktop). nginx exits at start if it can't resolve the host.
+
+messenger-be binds `127.0.0.1`, so from its own container or another host it's unreachable until it binds `0.0.0.0`.
+
 ### What working looks like
 
 | Action | Expected |
@@ -39,11 +52,11 @@ No install and no build step for the frontend. Needs Python 3 (or any static fil
 
 ### Notes for agents
 
-- **No mocks.** The chat talks to `ws://127.0.0.1:3000/ws` (`ws-connect` in `index.html`'s `<template id="chat-screen">`). Test it with two browser contexts logged in as different users.
+- **No mocks.** The chat connects to `WS_URL` from `js/config.js` (`ws://127.0.0.1:3000/ws`; `/ws` in the Docker image). Test it with two browser contexts logged in as different users.
 - **Login is client-side.** `js/login.js` validates the username and swaps the chat template into `#app`; nothing goes over HTTP.
 - **Checks:** there's no `package.json`, typecheck, lint or test suite. Syntax-check the JS with:
   ```sh
-  for f in public/js/*.js public/mock-sw.js; do node --check "$f"; done
+  for f in public/js/*.js public/mock-sw.js docker/config.js; do node --check "$f"; done
   ```
 
 ## Structure
@@ -51,10 +64,15 @@ No install and no build step for the frontend. Needs Python 3 (or any static fil
 ```
 public/                web root: everything the browser loads
 ├── index.html         app shell, login screen, chat screen <template>; every screen goes into #app
+├── js/config.js       WS_URL: where the chat connects
 ├── js/app.js          shared UI: theme toggle, network error message
 ├── js/login.js        login: validates the username, opens the chat screen
 ├── js/chat.js         chat: adapts htmx-ext-ws to the backend's JSON messages
 └── mock-sw.js         kill switch: removes the old mock Service Worker from browsers that ran it
+Dockerfile             nginx image: serves public/, proxies /ws to BACKEND_URL
+docker/
+├── nginx.conf.template  nginx site, rendered at container start
+└── config.js          replaces js/config.js in the image (WS_URL = '/ws')
 ```
 
 ## Server contract

@@ -1,0 +1,21 @@
+server {
+    listen 80;
+    root /usr/share/nginx/html;
+
+    # The socket shares the page's origin, so an https page gets wss with no extra config.
+    location = /ws {
+        proxy_pass ${BACKEND_URL};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        # Default is 60 s, and an idle chat sends nothing, so it would drop and reconnect every minute.
+        proxy_read_timeout 1h;
+    }
+
+    location / {
+        # Revalidate on every load (304 when unchanged), so a deploy never leaves browsers on stale JS.
+        add_header Cache-Control "no-cache";
+        try_files $uri $uri/ =404;
+    }
+}

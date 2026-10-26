@@ -42,6 +42,7 @@
           integrity="sha384-2OatzQy1H+Zd/IIrjr1TcuDGqLXeHhbooAyJY1KdQMKnr4LZ22k31GBLdYKHmVjg" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/htmx-ext-ws@2.0.4/dist/ws.min.js"
           integrity="sha384-1RwI/nvUSrMRuNj7hX1+27J8XDdCoSLf0EjEyF69nacuWyiJYoQ/j39RT1mSnd2G" crossorigin="anonymous"></script>
+  <script src="/js/config.js" defer></script>
   <script src="/js/app.js" defer></script>
   <script src="/js/chat.js" defer></script>
   <script src="/js/login.js" defer></script>
@@ -107,10 +108,10 @@
     </section>
   </main>
 
-  <!-- Chat screen. js/login.js copies it into #app after login; htmx then opens the socket.
-       ws-connect: messenger-be, which only listens on 127.0.0.1:3000. -->
+  <!-- Chat screen. js/login.js copies it into #app after login and sets ws-connect from
+       js/config.js; htmx then opens the socket. -->
   <template id="chat-screen">
-    <section data-chat hx-ext="ws" ws-connect="ws://127.0.0.1:3000/ws" aria-labelledby="chat-title"
+    <section data-chat hx-ext="ws" aria-labelledby="chat-title"
              class="group/chat glass flex h-[min(44rem,calc(100dvh-8rem))] w-full flex-col overflow-hidden rounded-3xl">
       <header class="flex items-center justify-between gap-4 border-b border-slate-900/10 px-5 py-4 dark:border-white/10">
         <div class="min-w-0">
