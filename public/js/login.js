@@ -15,7 +15,11 @@ loginForm.addEventListener('submit', (event) => {
     input.focus();
     return;
   }
-  openChat(input.value);
+  const username = input.value.trim();
+  try {
+    localStorage.setItem('username', username);
+  } catch {}
+  openChat(username);
 });
 
 function validateUsername(username) {
@@ -26,6 +30,9 @@ function validateUsername(username) {
 
 // htmx.process runs hx-ext="ws" on the new markup, which opens the socket.
 function openChat(username) {
+  try {
+    localStorage.setItem('username', username);
+  } catch {}
   const screen = document.getElementById('chat-screen').content.cloneNode(true);
   const chat = screen.querySelector('[data-chat]');
   chat.setAttribute('ws-connect', WS_URL);
@@ -35,4 +42,18 @@ function openChat(username) {
   app.replaceChildren(screen);
   htmx.process(app);
   app.querySelector('[autofocus]').focus();
+}
+
+// Return directly to chat when this browser already has a valid username.
+let savedUsername = null;
+try {
+  savedUsername = localStorage.getItem('username');
+} catch {}
+
+if (savedUsername && !validateUsername(savedUsername)) {
+  openChat(savedUsername);
+} else if (savedUsername) {
+  try {
+    localStorage.removeItem('username');
+  } catch {}
 }
