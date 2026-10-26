@@ -21,14 +21,6 @@
     html.dark { background: #020617; color-scheme: dark; }
   </style>
 
-  <!-- htmx swaps 422 (validation error) responses too, so the server can send back the error message. -->
-  <meta name="htmx-config" content='{"responseHandling":[
-    {"code":"204","swap":false},
-    {"code":"[23]..","swap":true},
-    {"code":"422","swap":true},
-    {"code":"[45]..","swap":false,"error":true}
-  ]}'>
-
   <!-- integrity: the browser refuses the file if the CDN serves different bytes. -->
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.3/dist/index.global.js"
           integrity="sha384-2ql948lIdLcGEE0/qxNiudyTjgauA3RDJERu5xW75kFCvSl5a9odyQYCb6tEjnmB" crossorigin="anonymous"></script>
@@ -50,10 +42,9 @@
           integrity="sha384-2OatzQy1H+Zd/IIrjr1TcuDGqLXeHhbooAyJY1KdQMKnr4LZ22k31GBLdYKHmVjg" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/htmx-ext-ws@2.0.4/dist/ws.min.js"
           integrity="sha384-1RwI/nvUSrMRuNj7hX1+27J8XDdCoSLf0EjEyF69nacuWyiJYoQ/j39RT1mSnd2G" crossorigin="anonymous"></script>
-  <!-- MOCK: delete this line when the real backend exists (see README). -->
-  <script src="/mock/register.js"></script>
   <script src="/js/app.js" defer></script>
   <script src="/js/chat.js" defer></script>
+  <script src="/js/login.js" defer></script>
 </head>
 
 <body class="min-h-dvh bg-slate-100 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100">
@@ -91,18 +82,8 @@
       <h1 id="login-title" class="text-2xl font-semibold tracking-tight">Join the conversation</h1>
       <p class="mt-1 text-sm text-slate-600 dark:text-slate-300">Pick a username. No account, no password.</p>
 
-      <!-- A 422 marks the field invalid; typing clears it. Other failures leave the field state alone. -->
-      <form class="mt-8 space-y-5"
-            hx-post="/login"
-            hx-target="#app"
-            hx-disabled-elt="find button"
-            hx-indicator="find button"
-            hx-on::after-request="
-              if (event.detail.xhr.status === 422) {
-                this.elements.username.setAttribute('aria-invalid', 'true');
-                this.elements.username.focus();
-              }
-            ">
+      <!-- No request: messenger-be has no /login, so js/login.js opens the chat in the browser. -->
+      <form data-login-form class="mt-8 space-y-5">
         <div>
           <label for="username" class="block text-sm font-medium">Username</label>
           <input id="username" name="username" type="text"
@@ -113,23 +94,62 @@
                  placeholder="e.g. ada_lovelace"
                  class="mt-2 block w-full rounded-xl border border-slate-300 bg-white/80 px-4 py-3 text-base shadow-sm outline-none transition placeholder:text-slate-500 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/25 aria-[invalid=true]:border-rose-500! aria-[invalid=true]:focus:ring-rose-500/25 dark:border-white/15 dark:bg-slate-950/50 dark:placeholder:text-slate-400 dark:focus:border-indigo-400">
           <p id="username-hint" class="mt-2 text-xs text-slate-600 dark:text-slate-400">3–20 characters: letters, numbers or _</p>
-          <!-- The server fills this on a 422. aria-live makes screen readers announce it, but only if
-               the region is already rendered, so it must never be display:none. -->
+          <!-- js/login.js fills this when the username is invalid. aria-live makes screen readers announce
+               it, but only if the region is already rendered, so it must never be display:none. -->
           <p id="username-error" aria-live="polite" class="mt-2 text-sm font-medium text-rose-700 empty:mt-0 dark:text-rose-300"></p>
         </div>
 
         <button type="submit"
-                class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-linear-to-r from-indigo-600 to-violet-600 px-4 py-3 font-semibold text-white shadow-lg shadow-indigo-600/25 transition hover:from-indigo-700 hover:to-violet-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 active:scale-[.99] disabled:cursor-wait disabled:opacity-80 motion-reduce:transition-none dark:focus-visible:outline-indigo-400">
-          <!-- Shown while the request is in flight (htmx adds .htmx-request to the button). -->
-          <svg class="hidden size-4 animate-spin in-[.htmx-request]:block" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" class="opacity-30"/>
-            <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
-          </svg>
+                class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-linear-to-r from-indigo-600 to-violet-600 px-4 py-3 font-semibold text-white shadow-lg shadow-indigo-600/25 transition hover:from-indigo-700 hover:to-violet-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 active:scale-[.99] motion-reduce:transition-none dark:focus-visible:outline-indigo-400">
           Join
         </button>
       </form>
     </section>
   </main>
+
+  <!-- Chat screen. js/login.js copies it into #app after login; htmx then opens the socket.
+       ws-connect: messenger-be, which only listens on 127.0.0.1:3000. -->
+  <template id="chat-screen">
+    <section data-chat hx-ext="ws" ws-connect="ws://127.0.0.1:3000/ws" aria-labelledby="chat-title"
+             class="group/chat glass flex h-[min(44rem,calc(100dvh-8rem))] w-full flex-col overflow-hidden rounded-3xl">
+      <header class="flex items-center justify-between gap-4 border-b border-slate-900/10 px-5 py-4 dark:border-white/10">
+        <div class="min-w-0">
+          <h1 id="chat-title" class="text-lg font-semibold tracking-tight">Chat</h1>
+          <p class="truncate text-sm text-slate-600 dark:text-slate-300">Signed in as <strong data-chat-username class="font-semibold text-slate-900 dark:text-white"></strong></p>
+        </div>
+        <p class="flex shrink-0 items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+          <span aria-hidden="true" class="size-2 rounded-full bg-amber-500 group-data-[status=open]/chat:bg-emerald-500"></span>
+          <span data-chat-status role="status">Connecting…</span>
+        </p>
+      </header>
+
+      <!-- role=log: screen readers announce new messages. tabindex: keyboard users can scroll it. -->
+      <div data-chat-log role="log" aria-label="Messages" tabindex="0"
+           class="group/log flex-1 overflow-y-auto px-4 py-5 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500 sm:px-5">
+        <p class="grid h-full place-items-center text-center text-sm text-slate-600 group-has-[li]/log:hidden dark:text-slate-400">No messages yet. Say hi!</p>
+        <ol data-chat-messages class="space-y-3"></ol>
+      </div>
+
+      <template data-chat-message-template>
+        <li class="group/msg flex flex-col items-start data-mine:items-end">
+          <span data-chat-author class="mb-1 px-1 text-xs font-medium text-slate-600 dark:text-slate-400"></span>
+          <p data-chat-text class="max-w-[85%] rounded-2xl rounded-bl-md bg-white px-4 py-2 break-words whitespace-pre-wrap text-slate-900 shadow-sm group-data-mine/msg:rounded-br-md group-data-mine/msg:rounded-bl-2xl group-data-mine/msg:bg-indigo-600 group-data-mine/msg:text-white dark:bg-slate-800 dark:text-slate-100 dark:group-data-mine/msg:bg-indigo-500"></p>
+        </li>
+      </template>
+
+      <form ws-send class="flex gap-2 border-t border-slate-900/10 p-3 dark:border-white/10">
+        <label for="message" class="sr-only">Message</label>
+        <input id="message" name="message" type="text" required maxlength="2000" autocomplete="off" autofocus
+               placeholder="Write a message…"
+               class="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white/80 px-4 py-3 text-base shadow-sm outline-none transition placeholder:text-slate-500 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/25 dark:border-white/15 dark:bg-slate-950/50 dark:placeholder:text-slate-400 dark:focus:border-indigo-400">
+        <!-- Enabled by js/chat.js once the socket is open. -->
+        <button type="submit" data-chat-send disabled
+                class="rounded-xl bg-linear-to-r from-indigo-600 to-violet-600 px-5 font-semibold text-white shadow-lg shadow-indigo-600/25 transition hover:from-indigo-700 hover:to-violet-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none dark:focus-visible:outline-indigo-400">
+          Send
+        </button>
+      </form>
+    </section>
+  </template>
 
   <!-- Network/server errors for any screen. role=alert announces new text immediately.
        Hidden with opacity, not display:none, so screen readers keep watching it. -->

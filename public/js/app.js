@@ -28,7 +28,6 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (event) =>
 });
 
 // Server unreachable or an unexpected error status: say so instead of failing silently.
-// 422 is not an error here; htmx-config swaps it into the form like a normal response.
 document.addEventListener('htmx:beforeRequest', () => showError(''));
 document.addEventListener('htmx:sendError', () => showError("Can't reach the server. Check your connection and try again."));
 document.addEventListener('htmx:responseError', (event) => showError(`Request failed (${event.detail.xhr.status}). Try again.`));
