@@ -1,93 +1,62 @@
 # Messenger
 
-A learning project for getting to know sockets and how the frontend talks to the backend.
+A learning project for WebSockets: a chat frontend for [messenger-be](https://github.com/nikrontech/messenger-be) (Rust/axum).
 
-Stack: HTMX 2 + plain HTML, Tailwind CSS (browser CDN build), `htmx-ext-ws` for real-time messages, Alpine.js only if needed.
+Stack: HTMX 2 + `htmx-ext-ws`, plain HTML, Tailwind CSS (browser CDN build). No install, no build step.
 
-Backend: [messenger-be](https://github.com/nikrontech/messenger-be) (Rust/axum). It only has the chat WebSocket (`ws://127.0.0.1:3000/ws`), so there's no login request: the page checks the username itself and sends it with every message.
+## Run locally
 
-## Run
-
-No install and no build step for the frontend. Needs Python 3 (or any static file server) and internet access, because htmx and Tailwind load from jsDelivr. The chat needs the backend, which needs Rust (`brew install rust` or https://rustup.rs).
-
-0. Start the backend, from a clone of messenger-be next to this repo. It keeps running:
+1. Start the backend (needs Rust), from a messenger-be clone next to this repo:
    ```sh
    cd ../messenger-be && cargo run
    ```
-   Ready when it prints `WebSocket server listening at ws://127.0.0.1:3000/ws`. Without it, login still works but the chat stays on "Connecting…"/"Reconnecting…" with Send disabled.
-1. Start the frontend server from this repo's root. It keeps running, so start it in the background:
+2. Serve the frontend:
    ```sh
    python3 -m http.server 5173 -d public
    ```
-   If port 5173 is taken (`lsof -nP -iTCP:5173 -sTCP:LISTEN`), use another port.
-2. Check it serves: `curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5173/` prints `200`.
-3. Open http://localhost:5173 in a browser.
-4. Stop: `Ctrl+C`, or kill the background process.
+3. Open http://localhost:5173, pick a username, chat. Open a second window with another username to see messages arrive.
 
-### Docker (deployment)
+The chat shows "Connected" when the socket is up. Without the backend it stays on "Connecting…" with Send disabled.
 
-The image serves `public/` with nginx and proxies `/ws` to messenger-be, so the page and the socket share one origin (an https page gets `wss` automatically).
+## Deploy (Docker)
+
+nginx serves `public/` and proxies `/ws` to messenger-be, so the page and socket share one origin (https → `wss` automatically).
 
 ```sh
 docker build -t messenger-fe .
 docker run --rm -p 8080:80 -e BACKEND_URL=http://<backend-host>:3000 messenger-fe
 ```
 
-Open http://localhost:8080. `BACKEND_URL` is messenger-be as nginx reaches it: scheme, host and port, no path. The default, `http://host.docker.internal:3000`, is a backend running on your machine (Docker Desktop). nginx exits at start if it can't resolve the host.
+- `BACKEND_URL`: scheme, host, port, no path. Default `http://host.docker.internal:3000` (backend on your machine).
+- messenger-be binds `127.0.0.1`; to reach it from another container or host it must bind `0.0.0.0`.
 
-messenger-be binds `127.0.0.1`, so from its own container or another host it's unreachable until it binds `0.0.0.0`.
+## How it works
 
-### What working looks like
-
-| Action | Expected |
-|---|---|
-| Type `ada_lovelace`, click **Join** | The chat screen opens at once: "Signed in as ada_lovelace" |
-| Type `ab`, click **Join** | Browser validation blocks it; no request is sent |
-| Remove the input's `pattern` in DevTools, submit `<b>hi</b>` | Red field error showing the literal text `<b>hi</b>`; input gets `aria-invalid="true"` |
-| DevTools → Network | No `/login` request; one WebSocket to `127.0.0.1:3000/ws` |
-| Chat screen opens | Status goes from "Connecting…" to "Connected" and Send is enabled |
-| Two windows, two usernames, send from one | The message shows in both: on the right as "You" in the sender's, on the left with the name in the other |
-| Send `<b>hi</b>` | Shown as literal text, not bold |
-| Stop the backend | Status "Reconnecting…", Send disabled. Restart it: back to "Connected" within about a minute (retries back off up to 64 s) |
-
-### Notes for agents
-
-- **No mocks.** The chat connects to `WS_URL` from `js/config.js` (`ws://127.0.0.1:3000/ws`; `/ws` in the Docker image). Test it with two browser contexts logged in as different users.
-- **Login is client-side.** `js/login.js` validates the username and swaps the chat template into `#app`; nothing goes over HTTP.
-- **Checks:** there's no `package.json`, typecheck, lint or test suite. Syntax-check the JS with:
-  ```sh
-  for f in public/js/*.js public/mock-sw.js docker/config.js; do node --check "$f"; done
-  ```
+- **Login is client-side.** The backend has no `/login`; `js/login.js` validates the username (3–20 chars, `[A-Za-z0-9_]`) and opens the chat. The backend accepts any username, so anyone can post as anyone.
+- **Socket URL** comes from `WS_URL` in `js/config.js`: `ws://127.0.0.1:3000/ws` locally, `/ws` in the Docker image (`docker/config.js`).
+- **Protocol:** JSON text frames on `GET /ws`. The client sends `{"username", "message"}`; the server broadcasts the same JSON to every client, sender included. No history.
+- Messages render via `textContent`, so markup shows as text.
 
 ## Structure
 
 ```
-public/                web root: everything the browser loads
-├── index.html         app shell, login screen, chat screen <template>; every screen goes into #app
-├── js/config.js       WS_URL: where the chat connects
-├── js/app.js          shared UI: theme toggle, network error message
-├── js/login.js        login: validates the username, opens the chat screen
-├── js/chat.js         chat: adapts htmx-ext-ws to the backend's JSON messages
-└── mock-sw.js         kill switch: removes the old mock Service Worker from browsers that ran it
-Dockerfile             nginx image: serves public/, proxies /ws to BACKEND_URL
+public/
+├── index.html         app shell, login form, chat <template>
+├── js/config.js       WS_URL
+├── js/app.js          theme toggle, network error message
+├── js/login.js        username check, opens the chat
+├── js/chat.js         adapts htmx-ext-ws to the JSON protocol
+└── mock-sw.js         kill switch for the old mock Service Worker; delete once unused
+Dockerfile             nginx image
 docker/
-├── nginx.conf.template  nginx site, rendered at container start
-└── config.js          replaces js/config.js in the image (WS_URL = '/ws')
+├── nginx.conf.template  site config; BACKEND_URL filled in at start
+└── config.js          WS_URL = '/ws' for the image
 ```
 
-## Server contract
+## Checks
 
-WebSocket `GET /ws` on messenger-be (JSON text frames both ways):
+No package.json, lint or tests. Syntax check:
 
-| Direction | Frame |
-|---|---|
-| Client → server | `{"username": "ada_lovelace", "message": "hi"}` |
-| Server → every client, sender included | the same JSON. The page marks it as "You" when `username` matches its own. |
-
-The server sends JSON, not HTML, so `js/chat.js` renders each message from the `<template data-chat-message-template>` in the chat screen, using `textContent`. There is no history: a client only sees messages sent while it's connected.
-
-Username rule: 3–20 characters, `[A-Za-z0-9_]`. Only the browser checks it: the backend accepts any `username`, so anyone can post as anyone.
-
-## Old mock
-
-Earlier versions answered `/login` with a Service Worker. A browser that ran it keeps it even after the file is gone, so `public/mock-sw.js` is now a kill switch: on the next visit it unregisters itself and reloads the page. Delete it once no one has visited with the mock for a while.
+```sh
+for f in public/js/*.js public/mock-sw.js docker/config.js; do node --check "$f"; done
+```
